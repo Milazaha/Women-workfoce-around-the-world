@@ -1,0 +1,151 @@
+---
+title: "Untitled"
+author: "Adams Jemila"
+date: "3/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(pander)
+library(sqldf)
+#load data
+labour_stats <- read_csv("C:\\Users\\HP\\Downloads\\POP_XWAP_SEX_AGE_NB_A-filtered-2022-03-03.csv")
+```
+
+## Introduction
+### Data quality assessment
+
+Data size: 
+
+Numbers of rows:`r nrow(labour_stats)`
+
+numbers of columns:`r ncol(labour_stats)`
+
+column names: `r names(labour_stats)`
+
+```{r rename, echo=TRUE}
+# change the column names
+names(labour_stats) <- c('country', 'indicator', 'source', 'sex', 'age_group', 'year', 'population_per_1000', 'status', 'note_1', 'note_2', 'note_3')
+
+```
+```{r include=FALSE}
+#make sure it is all measured per 1000, by looking into the column .
+length(unique(labour_stats$indicator))
+
+#look into the status column  and not colums,
+length(unique(labour_stats$status))
+unique(labour_stats$status)
+
+
+length(unique(labour_stats$note_1))
+unique(labour_stats$note_1)
+
+length(unique(labour_stats$note_2))
+
+unique(labour_stats$note_2)
+
+unique(labour_stats$note_3)
+```
+
+
+```{r}
+
+clean_data <- labour_stats %>% 
+  select(country, sex:population_per_1000)
+
+```
+
+keeping 5 relevant columns 
+`r colnames(clean_data)`
+
+We will run a quality check on the rows to find;
+
+* missing data
+* duplicates
+* accuracy 
+
+```{r echo=FALSE}
+
+#class for each column in  the clean data
+for (i in colnames(clean_data)){
+  print (i)
+  print(class(clean_data[[i]]))
+  print (" Numbers of missing values in the column:")
+  print(i)
+  print (sum(is.na(clean_data[[i]])))
+  print (" Numbers of unique values in the column:")
+  print (i)
+  print(length(unique(clean_data[[i]]) ) )
+  print("............................................................")
+}
+```
+
+```{r}
+#creat a vector of countries
+country_198 <- c("Afghanistan", "Albania","Algeria", "Andorra", 
+"Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Côte d'Ivoire", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "DR Congo", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar","Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts & Nevis", "Saint Lucia", "Samoa", "San Marino", "Sao Tome & Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "St. Vincent & Grenadines", "State of Palestine", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe")
+ 
+#compare vector with the country column to identify extra or misssing countries
+setdiff( clean_data$country, country_198)
+
+#look at the unique sex and age group to further understand our data
+unique(clean_data$sex)
+unique(clean_data$age_group)
+
+#filter for only  the total of male and female, split the gender into its individual column 
+clean_data <- clean_data %>% 
+    filter(sex != "Sex: Other", sex != "Sex: Total", age_group == "Age (Aggregate bands): Total" ) %>% 
+    pivot_wider(names_from = sex, values_from = population_per_1000)
+
+#rename the columns
+names(clean_data) <- c('country', 'age_group', 'year', 'male', 'female') 
+
+  
+clean_data <- clean_data %>%   
+  na.omit() %>% 
+ mutate(total = male + female,
+        female_percent = female/total * 100,
+        male_percent = male/total * 100)
+
+#country's record for 2020
+record_for_2020 <- clean_data %>%
+  filter(year == 2020)
+
+#record of 2021
+record_for_2021 <- clean_data %>%
+  filter(year == 2021)
+
+
+#calculate percentage of women dominance in the 97 countries
+percent_dominance_female_2020 <- record_for_2020 %>% 
+  mutate(count_number = n()) %>%   # Tells you how many rows 
+filter(female_percent > 50) %>%   #filter for only above 50%
+  mutate(total_femal_dominnance = n()/count_number * 100) #divide number of rows by old number of rows *100
+
+world_female_dominance <-  percent_dominance_female_2020$total_femal_dominnance[[1]]
+
+#top 5 country which employed female labour the most
+top_5_countries_2020 <- record_for_2020 %>% 
+  arrange(-female_percent) %>% 
+  head(5)
+#bottom 5
+bottom_5_countries_2020 <- record_for_2020 %>% 
+  arrange(female_percent) %>% 
+  head(5)
+
+United_states <- clean_data %>% 
+  filter(country == "United States")
+
+write.csv(clean_data, "clean data.CSV")
+write.csv(record_for_2020, "record 2020.CSV")
+write.csv(record_for_2021, "record 2021.CSV")
+write.csv(top_5_countries_2020, "top5 2020.CSV")
+write.csv(bottom_5_countries_2020, "bottom5 2020.CSV")
+write.csv(United_states, "united state.csv")
+```
+  
+
+
+
